@@ -5,7 +5,6 @@ import transformers
 import torchvision
 from torchvision import transforms
 from PIL import Image
-from skimage import io, transform
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizer
 

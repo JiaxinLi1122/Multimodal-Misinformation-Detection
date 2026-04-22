@@ -13,13 +13,9 @@ numpy>=1.20.0
 
 # ── Image processing ─────────────────────────────────────────────────────────
 Pillow>=8.0.0
-scikit-image>=0.18.0
 
 # ── Keyword analysis ─────────────────────────────────────────────────────────
 nltk>=3.6.0
-
-# ── Utility (imported directly in mult_models.py) ────────────────────────────
-importlib-metadata>=4.0.0
 
 # ── Crawler: shared ──────────────────────────────────────────────────────────
 requests>=2.25.0

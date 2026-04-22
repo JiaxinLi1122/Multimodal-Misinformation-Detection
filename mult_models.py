@@ -1,4 +1,3 @@
-from importlib_metadata import re
 import torch
 import numpy as np
 import transformers
@@ -8,7 +7,6 @@ import torch.nn as nn
 from transformers import BertModel
 import pandas as pd
 from PIL import Image
-from skimage import io, transform
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizer
 import torch.nn.functional as F

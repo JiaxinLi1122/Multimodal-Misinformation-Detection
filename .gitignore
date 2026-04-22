@@ -39,6 +39,11 @@ Thumbs.db
 *.swp
 *.swo
 
+# ── Dataset binary files (images, embeddings, db) ────────────────────────────
+data/**/images_*/
+data/**/*.pickle
+data/**/*.db
+
 # ── Distribution / packaging ──────────────────────────────────────────────────
 dist/
 build/
