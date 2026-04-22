@@ -1,0 +1,10 @@
+{
+  "text_fc2_out": 32,
+  "text_fc1_out": 2742,
+  "dropout_p": 0.4,
+  "fine_tune_text_module": false,
+  "img_fc1_out": 2742,
+  "img_fc2_out": 32,
+  "fine_tune_vis_module": false,
+  "fusion_output_size": 35
+}
