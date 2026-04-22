@@ -1,0 +1,39 @@
+# ── Core: deep learning framework ────────────────────────────────────────────
+torch>=1.9.0
+torchvision>=0.10.0
+
+# ── NLP / BERT ───────────────────────────────────────────────────────────────
+# AdamW / get_linear_schedule_with_warmup were removed from transformers in
+# newer releases; keep <5.0.0 until the import site is updated to torch.optim
+transformers>=4.0.0,<5.0.0
+
+# ── Data handling ─────────────────────────────────────────────────────────────
+pandas>=1.2.0
+numpy>=1.20.0
+
+# ── Image processing ─────────────────────────────────────────────────────────
+Pillow>=8.0.0
+scikit-image>=0.18.0
+
+# ── Keyword analysis ─────────────────────────────────────────────────────────
+nltk>=3.6.0
+
+# ── Utility (imported directly in mult_models.py) ────────────────────────────
+importlib-metadata>=4.0.0
+
+# ── Crawler: shared ──────────────────────────────────────────────────────────
+requests>=2.25.0
+lxml>=4.6.0
+tqdm>=4.60.0
+
+# ── Crawler: Twitter ─────────────────────────────────────────────────────────
+flask>=2.0.0
+flask-cors>=3.0.0
+twython>=3.9.0
+newspaper3k>=0.2.8
+absl-py>=0.12.0
+
+# ── Crawler: Weibo (optional writers – install only what you use) ─────────────
+# pymongo>=4.0.0        # mongo_writer
+# pymysql>=1.0.0        # mysql_writer
+# kafka-python>=2.0.0   # kafka_writer
