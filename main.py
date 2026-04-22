@@ -8,6 +8,7 @@ from transformers import BertTokenizer, AdamW, get_linear_schedule_with_warmup
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
+import logging
 import random
 import os
 import json
@@ -32,12 +33,26 @@ with open("./config/config.json", 'r', encoding='utf-8') as f:
 # --- Seed first, before any random operations ---
 set_seed(cfg['seed'])
 
+# --- Logging (overwrite each run; one clean log per training session) ---
+os.makedirs('logs', exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)-8s | %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler('logs/train.log', mode='w', encoding='utf-8'),
+        logging.StreamHandler(),
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # --- Device ---
 if torch.cuda.is_available():
     device = torch.device("cuda")
+    logger.info("Using GPU: %s", torch.cuda.get_device_name(0))
 else:
-    print('No GPU available, using the CPU instead.')
     device = torch.device("cpu")
+    logger.info("No GPU available, using CPU.")
 
 # --- Image transforms ---
 # Augmentation applied only during training to reduce overfitting.
@@ -80,7 +95,7 @@ df_train, df_val = train_test_split(
 df_train = df_train.reset_index(drop=True)
 df_val   = df_val.reset_index(drop=True)
 
-print(f"Split sizes — train: {len(df_train)}, val: {len(df_val)}, test: {len(df_test)}")
+logger.info("Dataset split — train: %d, val: %d, test: %d", len(df_train), len(df_val), len(df_test))
 
 # --- Datasets ---
 train_dataset = FakeNewsDataset(df_train, data_dir + "images_train/", train_transform, tokenizer, MAX_LEN)
@@ -108,6 +123,11 @@ scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=0, num_t
 # --- Train ---
 os.makedirs('./saved_models', exist_ok=True)
 MODEL_SAVE_PATH = './saved_models/best_model.pt'
+logger.info(
+    "Training config — epochs=%d, batch_size=%d, lr=%s, patience=%d, val_split=%.0f%%",
+    EPOCHS, BATCH_SIZE, cfg['l_r'], cfg['early_stopping_patience'],
+    cfg['val_split_ratio'] * 100
+)
 
 train(
     model=final_model,
@@ -125,28 +145,32 @@ train(
 )
 
 # --- Final evaluation on held-out test set (run only once, after training) ---
-print("\n" + "="*60)
-print("Final Test Set Evaluation")
-print("="*60)
 final_model.load_state_dict(torch.load(MODEL_SAVE_PATH, map_location=device))
 m = evaluate(final_model, loss_fn, test_dataloader, device)
 
+logger.info(
+    "TEST RESULTS | loss=%.6f | acc=%.2f%% | precision=%.2f%% | recall=%.2f%% | f1=%.2f%%",
+    m['loss'], m['accuracy'], m['precision'], m['recall'], m['f1']
+)
+
+cm = confusion_matrix(m['all_labels'], m['all_preds'])
+logger.info("Confusion Matrix — TN=%d | FP=%d | FN=%d | TP=%d",
+            cm[0][0], cm[0][1], cm[1][0], cm[1][1])
+
+# Print full classification report to console only (too wide for single log line)
+print("\n" + "="*60)
+print("Final Test Set Evaluation")
+print("="*60)
 print(f"Loss:      {m['loss']:.6f}")
 print(f"Accuracy:  {m['accuracy']:.2f}%")
 print(f"Precision: {m['precision']:.2f}%  (fake class)")
 print(f"Recall:    {m['recall']:.2f}%  (fake class)")
 print(f"F1-Score:  {m['f1']:.2f}%  (fake class)")
-
 print("\nClassification Report:")
 print(classification_report(m['all_labels'], m['all_preds'],
                             target_names=['real (0)', 'fake (1)'], digits=4))
-
-cm = confusion_matrix(m['all_labels'], m['all_preds'])
 print("Confusion Matrix (rows=actual, cols=predicted):")
 print(f"                  Pred:real  Pred:fake")
 print(f"  Actual: real    {cm[0][0]:^9}  {cm[0][1]:^9}")
 print(f"  Actual: fake    {cm[1][0]:^9}  {cm[1][1]:^9}")
-print(f"\n  True Negatives (TN): {cm[0][0]}  — real correctly identified")
-print(f"  False Positives (FP): {cm[0][1]}  — real misclassified as fake")
-print(f"  False Negatives (FN): {cm[1][0]}  — fake missed")
-print(f"  True Positives (TP): {cm[1][1]}  — fake correctly detected")
+print(f"\n  TN={cm[0][0]}  FP={cm[0][1]}  FN={cm[1][0]}  TP={cm[1][1]}")

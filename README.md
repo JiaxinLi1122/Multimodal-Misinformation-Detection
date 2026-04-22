@@ -1,43 +1,44 @@
-# Multimodal Misinformation Detection: Knowledge Base Construction and Identification
+# Multimodal Fake News Detection
 
-> A deep learning system that detects fake news on social media by jointly analyzing **text** and **images** using BERT and VGG-19, supporting both Twitter and Weibo platforms.
+> A deep learning system that detects fake news on social media by jointly analyzing **text** and **images**, using BERT for language understanding and VGG-19 for visual feature extraction, with support for both Twitter (English) and Weibo (Chinese) datasets.
 
 ---
 
 ## Background
 
-The rapid spread of misinformation on social media platforms poses serious challenges to public discourse and trust. Traditional text-only detection approaches are increasingly insufficient, as fabricated posts often pair misleading text with manipulated or out-of-context images.
+Misinformation on social media rarely travels as text alone — fabricated stories are routinely paired with out-of-context or manipulated images to increase credibility. Text-only classifiers miss this signal entirely.
 
-This project addresses that gap with a **multimodal approach**: by fusing language understanding (BERT) and visual understanding (VGG-19), the model captures cross-modal inconsistencies that neither modality alone can reliably detect. The system covers both English (Twitter/FakeNewsNet) and Chinese (Weibo) content, along with dedicated crawlers for each platform.
-
----
-
-## Features
-
-- **Dual-platform support** — processes data from Twitter (English) and Weibo (Chinese)
-- **Multimodal fusion** — jointly encodes text and images into a unified representation
-- **Pretrained backbone models** — leverages BERT-base-uncased and VGG-19 with ImageNet weights
-- **End-to-end pipeline** — from raw social media data to binary fake/real classification
-- **Flexible data storage** — supports CSV, SQLite, MySQL, MongoDB, and Kafka export
-- **Keyword analysis** — extracts and stores high-frequency terms from misinformation posts
-- **Modular crawlers** — independent, configurable scrapers for Twitter API and Weibo
+This project takes a **multimodal approach**: text and image features are encoded independently by pretrained models, then fused into a single representation for binary classification (real vs. fake). The architecture is intentionally simple — the goal is a clean, reproducible baseline that demonstrates multimodal reasoning without requiring massive compute.
 
 ---
 
-## Tech Stack
+## Model Architecture
 
-| Category         | Technology                                      |
-|------------------|-------------------------------------------------|
-| Deep Learning    | PyTorch                                         |
-| NLP              | BERT (`bert-base-uncased`) via HuggingFace Transformers |
-| Computer Vision  | VGG-19 via TorchVision                          |
-| Data Processing  | Pandas, NumPy, PIL, scikit-image                |
-| NLP Utilities    | NLTK (tokenization, lemmatization, stopwords)   |
-| Twitter Crawler  | Twython, Newspaper3k                            |
-| Weibo Crawler    | Requests + custom HTML parsers                  |
-| API Rate Manager | Flask, Flask-CORS                               |
-| Databases        | SQLite, MySQL, MongoDB                          |
-| Messaging        | Apache Kafka (optional export)                  |
+```
+Text (post) ──► BERT-base-uncased
+                └─ [CLS] pooler output (768-dim)
+                └─ FC(768 → 2742) + ReLU + Dropout(0.4)
+                └─ FC(2742 → 32)
+                └─ text_feat  ──────────────────────────┐
+                                                        ▼
+                                              Concat (64-dim)
+                                              FC(64 → 35) + ReLU + Dropout
+                                              FC(35 → 1) + Sigmoid
+                                                        ▲
+Image (224×224) ──► VGG-19 (pretrained, ImageNet)       │
+                    └─ feature extractor (4096-dim)      │
+                    └─ FC(4096 → 2742) + ReLU + Dropout │
+                    └─ FC(2742 → 32)                     │
+                    └─ img_feat  ────────────────────────┘
+
+Output: P(fake) — threshold at 0.5
+```
+
+**Design decisions:**
+- BERT and VGG-19 backbone weights are **frozen** by default (set `fine_tune_*_module: true` in config to unfreeze)
+- Fusion strategy: simple concatenation — interpretable and computationally cheap
+- Loss: Binary Cross-Entropy (`BCELoss`)
+- Optimizer: AdamW with linear warmup scheduler
 
 ---
 
@@ -45,91 +46,30 @@ This project addresses that gap with a **multimodal approach**: by fusing langua
 
 ```
 .
-├── main.py                  # Training entry point — full training loop
-├── dataset.py               # PyTorch Dataset — loads CSV + images, BERT tokenization
-├── mult_models.py           # Model definitions — TextEncoder, VisionEncoder, Fusion
-├── test.py                  # Evaluation script — runs model on test set
-├── key_words.py             # Keyword extraction — writes top-40 terms to SQLite
+├── main.py            # Training entry point (data loading, training loop, final evaluation)
+├── test.py            # Standalone test-set evaluation (loads saved checkpoint)
+├── dataset.py         # FakeNewsDataset — CSV + image loading, BERT tokenization
+├── mult_models.py     # TextEncoder, VisionEncoder, Text_Concat_Vision, train(), evaluate()
+├── key_words.py       # Keyword frequency analysis → writes to SQLite
 │
 ├── config/
-│   ├── config.json          # Model hyperparameters (FC layer sizes, dropout)
-│   └── config_opt.json      # Optimizer settings (learning rate, epsilon)
+│   └── config.json    # All hyperparameters (model + optimizer + training)
 │
 ├── crawler/
-│   ├── Twitter/
-│   │   ├── main.py                      # Crawler entry (factory pattern, multiprocessing)
-│   │   ├── config.json                  # Sources: politifact, gossipcop
-│   │   ├── tweet_collection.py          # Bulk tweet fetching (100/request)
-│   │   ├── news_content_collection.py   # News article scraping via Newspaper3k
-│   │   ├── user_profile_collection.py   # User metadata collection
-│   │   ├── resource_server/             # Flask app for multi-key API rate management
-│   │   └── util/TwythonConnector.py     # Twitter API connector with auto rate-limit handling
-│   │
-│   └── weibo/
-│       ├── spider.py          # Main Weibo crawler (date range, filters, downloads)
-│       ├── weibo.py           # Weibo post data model
-│       ├── user.py            # User data model
-│       ├── parser/            # Page parsers (posts, comments, albums, photos)
-│       ├── writer/            # Export writers (CSV, JSON, MySQL, SQLite, MongoDB, Kafka)
-│       └── downloader/        # Image and video downloaders
+│   ├── Twitter/       # Twitter API crawler (tweets, articles, user profiles)
+│   └── weibo/         # Weibo crawler (posts, images, user metadata)
 │
-└── data/
-    ├── twitter/
-    │   ├── train_posts_clean.csv    # ~13,366 labeled training posts
-    │   ├── test_posts.csv           # ~1,111 test posts
-    │   ├── images_train/            # 412 event-level image folders
-    │   └── images_test/             # 106 event-level image folders
-    │
-    └── weibo/
-        ├── text_content/            # Train/test splits for rumor & non-rumor
-        ├── rumor_images/            # 82 rumor event image folders
-        ├── nonrumor_images/         # 190 non-rumor event image folders
-        ├── w2v.pickle               # Pretrained Word2Vec embeddings
-        ├── word_embedding.pickle    # Word embedding matrix
-        └── stop_words.txt           # Chinese stopword list
+├── data/
+│   └── twitter/
+│       ├── train_posts_clean.csv   # Labeled training posts
+│       ├── test_posts.csv          # Held-out test posts
+│       ├── images_train/           # ⚠ Not tracked in git (see Data section)
+│       └── images_test/            # ⚠ Not tracked in git
+│
+├── saved_models/      # Auto-created — best checkpoint saved here
+├── logs/              # Auto-created — training log written here
+└── requirements.txt
 ```
-
----
-
-## Model Architecture
-
-The model follows a **dual-stream fusion** design:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Text Stream                                            │
-│                                                         │
-│  Raw Text ──► BERT (bert-base-uncased)                  │
-│               └── [CLS] token → 768-dim                 │
-│               └── FC1 (768 → 2742) + ReLU + Dropout     │
-│               └── FC2 (2742 → 32)                       │
-│               └── 32-dim text feature vector            │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-              ┌───────────────┐
-              │  Feature      │     64-dim concatenation
-              │  Fusion Layer │──► FC (64 → 35) ──► FC (35 → 1) ──► Sigmoid
-              └───────────────┘
-                      ▲
-┌─────────────────────┴───────────────────────────────────┐
-│  Vision Stream                                          │
-│                                                         │
-│  Image (224×224) ──► VGG-19 (pretrained, ImageNet)      │
-│                       └── 4096-dim feature              │
-│                       └── FC1 (4096 → 2742) + ReLU + Dropout │
-│                       └── FC2 (2742 → 32)               │
-│                       └── 32-dim visual feature vector  │
-└─────────────────────────────────────────────────────────┘
-
-Output: sigmoid(score) > 0.5 → FAKE  |  ≤ 0.5 → REAL
-```
-
-**Design notes:**
-- BERT and VGG-19 weights are frozen by default (`fine_tune = false`) to reduce memory requirements and prevent overfitting on limited data
-- Dropout (p=0.4) is applied after each intermediate FC layer
-- Loss function: Binary Cross-Entropy (`BCELoss`)
-- Optimizer: AdamW with linear warmup scheduler (lr = 3e-5)
 
 ---
 
@@ -142,53 +82,45 @@ Output: sigmoid(score) > 0.5 → FAKE  |  ≤ 0.5 → REAL
 | Train | `train_posts_clean.csv` | ~13,366 |
 | Test  | `test_posts.csv`        | ~1,111  |
 
-**Columns:** `post_id`, `post_text`, `user_id`, `image_id`, `username`, `timestamp`, `label` (fake/real)
+**Key columns:** `post_text`, `image_id`, `label` (`fake` / `real`)
 
-**Images:** Organized by event (e.g., `boston_fake_*`, `attacks_paris_*`) — 412 train folders, 106 test folders.
+Images are organized by event folder (e.g., `boston_fake_001.jpg`) under `images_train/` and `images_test/`.
 
-**Sources:** [FakeNewsNet](https://github.com/KaiDMML/FakeNewsNet) — PolitiFact and GossipCop.
+Source: [FakeNewsNet](https://github.com/KaiDMML/FakeNewsNet) — PolitiFact and GossipCop.
 
 ### Weibo (Chinese)
 
 | Split | Rumor | Non-Rumor |
 |-------|-------|-----------|
-| Train | 5,486 posts | 4,515 posts |
-| Test  | 892 posts   | 918 posts   |
+| Train | 5,486 | 4,515 |
+| Test  | 892   | 918   |
 
-**Structure per post (3 lines):**
-```
-Line 1: tweet_id | username | tweet_url | user_url | timestamp | is_original |
-        retweet_count | comment_count | like_count | user_id | verified |
-        followers | following | tweet_count | platform
-Line 2: image_url_1 | image_url_2 | null
-Line 3: post_content
-```
+> ⚠ **Image data is not included in this repository** due to size and licensing. See the [Data Setup](#data-setup) section below.
 
 ---
 
-## Getting Started
+## Data Setup
 
-### Prerequisites
+Images must be placed manually after cloning:
 
-- Python 3.7+
-- CUDA-enabled GPU **strongly recommended** (CPU training will be extremely slow)
-- ~8 GB VRAM minimum (16 GB recommended with both BERT and VGG-19 loaded)
-
-### Install Dependencies
-
-```bash
-pip install torch torchvision
-pip install transformers
-pip install pandas numpy
-pip install Pillow scikit-image
-pip install nltk
-pip install tqdm
-pip install flask flask-cors        # only needed for Twitter crawler
-pip install twython newspaper3k     # only needed for Twitter crawler
-pip install requests
+```
+data/twitter/images_train/    ← training images (.jpg, named by image_id)
+data/twitter/images_test/     ← test images
 ```
 
-Download required NLTK resources:
+To obtain the images, use the Twitter crawler in `crawler/Twitter/` with your own API keys, or request the dataset from the [FakeNewsNet repository](https://github.com/KaiDMML/FakeNewsNet).
+
+---
+
+## Installation
+
+**Requirements:** Python 3.8+, CUDA GPU recommended (CPU training is very slow with BERT + VGG-19).
+
+```bash
+pip install -r requirements.txt
+```
+
+Download required NLTK data (only needed for `key_words.py`):
 
 ```python
 import nltk
@@ -197,77 +129,132 @@ nltk.download('wordnet')
 nltk.download('stopwords')
 ```
 
-### Run
+---
+
+## Configuration
+
+All hyperparameters live in a single file: **`config/config.json`**
+
+```json
+{
+  "text_fc2_out": 32,
+  "text_fc1_out": 2742,
+  "dropout_p": 0.4,
+  "fine_tune_text_module": false,
+  "img_fc1_out": 2742,
+  "img_fc2_out": 32,
+  "fine_tune_vis_module": false,
+  "fusion_output_size": 35,
+
+  "l_r": 3e-05,
+  "eps": 1e-08,
+
+  "seed": 42,
+  "epochs": 10,
+  "batch_size": 8,
+  "max_len": 500,
+  "val_split_ratio": 0.1,
+  "early_stopping_patience": 3,
+  "early_stopping_min_delta": 1e-4
+}
+```
+
+---
+
+## Training
 
 ```bash
-# 1. Train the model
 python main.py
+```
 
-# 2. Evaluate on test set
+**What happens:**
+
+1. Loads `train_posts_clean.csv` and performs a stratified 90/10 train/val split (preserving class ratios)
+2. `test_posts.csv` is held out completely — never seen during training
+3. Trains for up to `epochs` rounds with early stopping based on **validation loss**
+4. Saves the best checkpoint to `saved_models/best_model.pt`
+5. After training, loads the best checkpoint and runs **one** final evaluation on the test set
+6. Logs all epoch metrics to `logs/train.log`
+
+**Training image pipeline (train only):**
+
+```
+Resize(224×224) → RandomHorizontalFlip → RandomRotation(±10°)
+→ ColorJitter(brightness/contrast/saturation=0.1, hue=0.05)
+→ ToTensor → Normalize(ImageNet stats)
+```
+
+Val and test images use the deterministic pipeline (Resize → ToTensor → Normalize) — no augmentation.
+
+---
+
+## Evaluation
+
+```bash
 python test.py
-
-# 3. Extract misinformation keywords → writes to data/test.db
-python key_words.py
 ```
 
-To adjust model hyperparameters, edit `config/config.json`. To change the learning rate or optimizer settings, edit `config/config_opt.json`.
+Loads the saved checkpoint and evaluates on the test set. Outputs all metrics to console.
 
 ---
 
-## Workflow
+## Evaluation Metrics
 
-```
-1. Data Collection
-   ├── Twitter crawler  →  tweets + article text + images + user profiles
-   └── Weibo crawler    →  posts + images + user metadata
+The model reports five metrics:
 
-2. Preprocessing
-   ├── Text: BERT tokenization, max length 500 tokens
-   └── Images: resize to 224×224, ImageNet normalization
+| Metric | Definition | Why it matters here |
+|--------|-----------|---------------------|
+| **Accuracy** | Correct predictions / total | Useful baseline; misleading on imbalanced data |
+| **Precision** (fake) | TP / (TP + FP) | How often "predicted fake" is actually fake — low = too many false alarms |
+| **Recall** (fake) | TP / (TP + FN) | How many real fakes are caught — low = dangerous misses |
+| **F1** (fake) | Harmonic mean of P & R | Single number balancing precision and recall |
+| **Confusion Matrix** | TN / FP / FN / TP | Shows which error type dominates |
 
-3. Model Training  (main.py)
-   ├── Batch size: 8
-   ├── Epochs: up to 50
-   ├── Loss: BCELoss
-   └── Optimizer: AdamW + linear warmup
+Precision, Recall, and F1 use `average='binary'` with **fake (1) as the positive class** — because the task objective is to detect fake news, not to be evaluated on how well the model identifies real posts.
 
-4. Evaluation  (test.py)
-   └── Metrics: accuracy, per-class performance
-
-5. Keyword Analysis  (key_words.py)
-   └── Top-40 misinformation keywords → SQLite (data/test.db, table: news_kw)
-```
+**Why not just accuracy?** If the test set is 70% real, a model that always predicts "real" achieves 70% accuracy but catches zero fake news. F1 captures this failure; accuracy does not.
 
 ---
 
-## Results
+## Experimental Results
 
-The model outputs a probability score per post. With threshold 0.5:
+| Dataset | Model | Accuracy | Precision | Recall | F1 |
+|---------|-------|----------|-----------|--------|-----|
+| Twitter | BERT + VGG-19 (frozen) | — | — | — | — |
+| Twitter | BERT + VGG-19 (fine-tuned) | — | — | — | — |
 
-- Score > 0.5 → classified as **FAKE**
-- Score ≤ 0.5 → classified as **REAL**
+> Results pending. Fill in after running `python main.py`.
 
-Evaluation metrics include binary classification accuracy on the held-out test set. The multimodal fusion consistently outperforms text-only or image-only baselines by capturing cross-modal inconsistencies (e.g., text claiming an event while the image is from an unrelated context).
+---
+
+## Training Logs
+
+Each training run writes to `logs/train.log` (overwritten on each run). Log format:
+
+```
+2024-04-22 14:32:01 | INFO     | Dataset split — train: 12029, val: 1337, test: 1111
+2024-04-22 14:32:01 | INFO     | Training config — epochs=10, batch_size=8, lr=3e-05, patience=3, val_split=10%
+2024-04-22 14:47:23 | INFO     | Epoch 1 | train_loss=0.689234 | val_loss=0.671102 | acc=58.34% | precision=61.20% | recall=54.10% | f1=57.43%
+2024-04-22 14:47:23 | INFO     | Saved best model — epoch=1, val_loss=0.671102
+...
+2024-04-22 15:12:44 | WARNING  | EarlyStopping: no improvement 3/3
+2024-04-22 15:12:44 | WARNING  | Early stopping triggered at epoch 7.
+2024-04-22 15:13:01 | INFO     | TEST RESULTS | loss=0.612xxx | acc=68.45% | precision=71.20% | recall=65.80% | f1=68.39%
+```
 
 ---
 
 ## Future Work
 
-- [ ] Replace VGG-19 with Vision Transformer (ViT) or CLIP for stronger image-text alignment
-- [ ] Add cross-attention between text and image features instead of simple concatenation
-- [ ] Extend to multilingual BERT for unified Chinese/English modeling
-- [ ] Build a REST API + web interface for real-time post verification
-- [ ] Incorporate social graph features (retweet patterns, user credibility scores)
-- [ ] Add explainability — highlight which words/image regions contributed to the prediction
-
----
-
-## Contributing
-
-Contributions, issues, and pull requests are welcome. Please open an issue first to discuss any significant changes.
+- [ ] Replace VGG-19 with a Vision Transformer (ViT) or CLIP image encoder
+- [ ] Add cross-attention between text and image token sequences instead of late fusion
+- [ ] Fine-tune BERT on social media domain data before fusion
+- [ ] Add explainability — gradient-based saliency maps for image regions, attention weights for text
+- [ ] Extend to multilingual BERT for joint Chinese/English modeling
+- [ ] REST API + lightweight web UI for real-time post verification
 
 ---
 
 ## License
 
-This project is intended for academic and research purposes.
+This project is for academic and research purposes. No license has been explicitly attached — if you intend to build on this work, please open an issue to discuss.

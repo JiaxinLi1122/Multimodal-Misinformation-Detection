@@ -13,11 +13,14 @@ import torch.nn.functional as F
 from transformers import AdamW, get_linear_schedule_with_warmup
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              classification_report, confusion_matrix)
+import logging
 import random
 import time
 import os
 import re
 import math
+
+logger = logging.getLogger(__name__)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -168,8 +171,8 @@ def train(model, loss_fn, optimizer, scheduler, train_dataloader, val_dataloader
     best_val_loss = float('inf')
     patience_counter = 0
 
-    print("Start training...\n")
-    print(f"{'Epoch':^7} | {'Batch':^7} | {'Train Loss':^12} | {'Val Loss':^10} | {'Val Acc':^9} | {'Elapsed':^9}")
+    logger.info("Start training...")
+    print(f"\n{'Epoch':^7} | {'Batch':^7} | {'Train Loss':^12} | {'Val Loss':^10} | {'Val Acc':^9} | {'Elapsed':^9}")
     print("-"*70)
 
     for epoch_i in range(epochs):
@@ -209,26 +212,34 @@ def train(model, loss_fn, optimizer, scheduler, train_dataloader, val_dataloader
             metrics = evaluate(model, loss_fn, val_dataloader, device)
             val_loss, val_accuracy = metrics['loss'], metrics['accuracy']
             time_elapsed = time.time() - t0_epoch
+
             print(f" {epoch_i + 1:^7} | {'-':^7} | {avg_train_loss:^12.6f} | {val_loss:^10.6f} | {val_accuracy:^9.2f} | {time_elapsed:^9.2f}s")
-            print(f"          precision={metrics['precision']:.2f}%  recall={metrics['recall']:.2f}%  f1={metrics['f1']:.2f}%  (binary/fake)")
             print("-"*70)
+            logger.info(
+                f"Epoch {epoch_i + 1} | "
+                f"train_loss={avg_train_loss:.6f} | val_loss={val_loss:.6f} | "
+                f"acc={val_accuracy:.2f}% | "
+                f"precision={metrics['precision']:.2f}% | "
+                f"recall={metrics['recall']:.2f}% | "
+                f"f1={metrics['f1']:.2f}%"
+            )
 
             if save_best:
                 if val_loss < best_val_loss - min_delta:
                     best_val_loss = val_loss
                     patience_counter = 0
                     torch.save(model.state_dict(), model_save_path)
-                    print(f"  [Saved] best model at epoch {epoch_i + 1} (val_loss={val_loss:.6f})")
+                    logger.info(f"Saved best model — epoch={epoch_i + 1}, val_loss={val_loss:.6f}")
                 else:
                     patience_counter += 1
-                    print(f"  [EarlyStopping] no improvement {patience_counter}/{patience}")
+                    logger.warning(f"EarlyStopping: no improvement {patience_counter}/{patience}")
                     if patience_counter >= patience:
-                        print(f"\nEarly stopping triggered at epoch {epoch_i + 1}.")
+                        logger.warning(f"Early stopping triggered at epoch {epoch_i + 1}.")
                         break
 
         print()
 
-    print("Training complete!")
+    logger.info("Training complete.")
     
     
     
