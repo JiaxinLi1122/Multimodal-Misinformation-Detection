@@ -10,7 +10,8 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizer
 import torch.nn.functional as F
-from transformers import AdamW, get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup
+from torch.optim import AdamW
 from sklearn.metrics import (precision_score, recall_score, f1_score,
                              classification_report, confusion_matrix)
 import logging
