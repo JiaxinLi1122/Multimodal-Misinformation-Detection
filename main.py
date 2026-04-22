@@ -39,8 +39,19 @@ else:
     print('No GPU available, using the CPU instead.')
     device = torch.device("cpu")
 
-# --- Image transform ---
-image_transform = torchvision.transforms.Compose([
+# --- Image transforms ---
+# Augmentation applied only during training to reduce overfitting.
+# Val and test use the deterministic pipeline (no randomness).
+train_transform = torchvision.transforms.Compose([
+    torchvision.transforms.Resize(size=(224, 224)),
+    torchvision.transforms.RandomHorizontalFlip(),
+    torchvision.transforms.RandomRotation(degrees=10),
+    torchvision.transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.05),
+    torchvision.transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+eval_transform = torchvision.transforms.Compose([
     torchvision.transforms.Resize(size=(224, 224)),
     torchvision.transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -72,9 +83,9 @@ df_val   = df_val.reset_index(drop=True)
 print(f"Split sizes — train: {len(df_train)}, val: {len(df_val)}, test: {len(df_test)}")
 
 # --- Datasets ---
-train_dataset = FakeNewsDataset(df_train, data_dir + "images_train/", image_transform, tokenizer, MAX_LEN)
-val_dataset   = FakeNewsDataset(df_val,   data_dir + "images_train/", image_transform, tokenizer, MAX_LEN)
-test_dataset  = FakeNewsDataset(df_test,  data_dir + "images_test/",  image_transform, tokenizer, MAX_LEN)
+train_dataset = FakeNewsDataset(df_train, data_dir + "images_train/", train_transform, tokenizer, MAX_LEN)
+val_dataset   = FakeNewsDataset(df_val,   data_dir + "images_train/", eval_transform,  tokenizer, MAX_LEN)
+test_dataset  = FakeNewsDataset(df_test,  data_dir + "images_test/",  eval_transform,  tokenizer, MAX_LEN)
 
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True,  num_workers=0)
 val_dataloader   = DataLoader(val_dataset,   batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
