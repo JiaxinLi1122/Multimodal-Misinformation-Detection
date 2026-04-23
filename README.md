@@ -244,6 +244,18 @@ Each training run writes to `logs/train.log` (overwritten on each run). Log form
 
 ---
 
+## Experiments
+
+- Baseline (no augmentation):  
+  👉 See details: `experiments/baseline.md`
+
+Summary:
+- Best validation loss: **0.038 (Epoch 4)**
+- Accuracy: ~99%
+- Slight overfitting observed after epoch 4
+
+---
+
 ## Future Work
 
 - [ ] Replace VGG-19 with a Vision Transformer (ViT) or CLIP image encoder
