@@ -55,6 +55,20 @@ Output: P(fake) — threshold at 0.5
 ├── config/
 │   └── config.json    # All hyperparameters (model + optimizer + training)
 │
+├── backend/           # FastAPI inference server
+│   ├── main.py        # POST /analyze endpoint
+│   ├── model_service.py  # Model loading, image fetching, inference functions
+│   └── requirements.txt
+│
+├── extension/         # Chrome Extension (Manifest V3)
+│   ├── manifest.json
+│   ├── popup.html / popup.js   # Extension UI
+│   └── content.js              # Page text + image extraction
+│
+├── docs/
+│   ├── plugin-plan.md    # Extension architecture plan
+│   └── plugin-demo.md    # Demo walkthrough and troubleshooting
+│
 ├── crawler/
 │   ├── Twitter/       # Twitter API crawler (tweets, articles, user profiles)
 │   └── weibo/         # Weibo crawler (posts, images, user metadata)
@@ -256,6 +270,45 @@ Summary:
 
 ---
 
+## Browser Extension Demo
+
+A Manifest V3 Chrome extension lets you analyse any webpage in real time using the trained model via a local FastAPI backend.
+
+### What the extension does
+
+1. Extracts the visible page text (`document.body.innerText`)
+2. Finds the largest visible image on the page
+3. POSTs both to `http://localhost:8000/analyze`
+4. Displays the risk level (`LOW` / `MEDIUM` / `HIGH`), the model's reasoning, and whether an image was used
+
+### Run the backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+The server starts at `http://localhost:8000`. The trained model is loaded once at startup (takes 5–15 seconds while BERT and VGG-19 weights load).
+
+Interactive API docs: `http://localhost:8000/docs`
+
+### Load the Chrome extension
+
+1. Open Chrome and go to `chrome://extensions`
+2. Enable **Developer mode** (toggle in the top-right corner)
+3. Click **Load unpacked** and select the `extension/` folder
+4. The "Multi-False Detector" icon appears in the toolbar
+5. Navigate to any news page and click the icon → **Analyse Current Page**
+
+### Current limitation
+
+The trained `Text_Concat_Vision` model requires **both** a text embedding and an image embedding — neither input alone is sufficient for calibrated output. When the extension finds an image URL on the page the backend downloads and preprocesses it for the model. If no image is found (or the download fails) the backend returns `MEDIUM` with a fallback message rather than running partial inference.
+
+Full demo walkthrough and troubleshooting: [`docs/plugin-demo.md`](docs/plugin-demo.md)
+
+---
+
 ## Future Work
 
 - [ ] Replace VGG-19 with a Vision Transformer (ViT) or CLIP image encoder
@@ -264,6 +317,16 @@ Summary:
 - [ ] Add explainability — gradient-based saliency maps for image regions, attention weights for text
 - [ ] Extend to multilingual BERT for joint Chinese/English modeling
 - [ ] REST API + lightweight web UI for real-time post verification
+
+---
+
+## Changelog
+
+### [0.3.0] — Chrome Extension + FastAPI Backend
+- **Chrome extension prototype** added (`extension/`): extracts visible text and the largest image from any page, displays risk level in a popup
+- **FastAPI backend** added (`backend/`): `POST /analyze` endpoint, CORS-enabled, returns `{ risk, reason, used_image }`
+- **Real model loading** connected: `Text_Concat_Vision` checkpoint (`saved_models/best_model.pt`) loaded once at server startup via `model_service.py`
+- **Multimodal inference path** prepared: if `image_url` is provided, the backend downloads the image, applies the training eval transform (Resize 224 → ToTensor → ImageNet normalise), and passes both text and image through the model; falls back to `MEDIUM` with an explanation when no image is available
 
 ---
 
