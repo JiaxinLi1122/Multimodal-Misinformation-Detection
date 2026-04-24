@@ -161,6 +161,9 @@ analyseBtn.addEventListener("click", async () => {
 
     renderResult(apiResponse, text.length, !!imageData);
 
+    // Mirror result to the page sidebar (fire-and-forget)
+    chrome.tabs.sendMessage(tab.id, { action: "showResult", result: apiResponse }).catch(() => {});
+
   } catch (err) {
     renderError(err.message);
   } finally {
