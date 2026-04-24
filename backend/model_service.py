@@ -9,10 +9,14 @@
 # The model is a multimodal classifier: sigmoid output close to 1.0 means fake,
 # close to 0.0 means real.  See mult_models.py for the architecture.
 
+import io
 import sys
 import json
+import requests
 import torch
 from pathlib import Path
+from PIL import Image
+from torchvision import transforms
 from transformers import BertTokenizer
 
 # --------------------------------------------------------------------------- #
@@ -38,6 +42,14 @@ BERT_MODEL_NAME = "bert-base-uncased"
 _MAX_LEN = 500
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Eval image transform – must be identical to eval_transform in main.py
+# (Resize → ToTensor → ImageNet normalisation).  No augmentation at inference.
+_IMAGE_TRANSFORM = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+])
 
 
 # --------------------------------------------------------------------------- #
@@ -117,6 +129,28 @@ def _prob_to_risk(prob: float) -> tuple[str, str]:
         "LOW",
         f"Model predicts likely real content ({1 - prob:.0%} real confidence).",
     )
+
+
+# --------------------------------------------------------------------------- #
+# Image loading
+# --------------------------------------------------------------------------- #
+
+def load_image_from_url(url: str) -> torch.Tensor:
+    """
+    Download an image, apply the eval transform, and return a [1, 3, 224, 224]
+    tensor ready to pass into Text_Concat_Vision.
+
+    Raises:
+        requests.RequestException  – network or HTTP error
+        PIL.UnidentifiedImageError – URL does not point to a valid image
+    """
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+
+    # Convert raw bytes → PIL RGB image → normalised tensor
+    image = Image.open(io.BytesIO(response.content)).convert("RGB")
+    tensor = _IMAGE_TRANSFORM(image).unsqueeze(0)  # add batch dim → [1, 3, 224, 224]
+    return tensor
 
 
 # --------------------------------------------------------------------------- #
