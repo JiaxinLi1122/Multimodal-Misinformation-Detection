@@ -94,6 +94,23 @@ function renderError(message) {
 
 // ── Main click handler ─────────────────────────────────────────────────────
 
+// On popup open: display any cached auto-analysis result for the current tab
+(async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    const key  = `tab_${tab.id}`;
+    const data = await chrome.storage.local.get(key);
+    const hit  = data[key];
+
+    if (!hit?.result || Date.now() - hit.ts > 10 * 60 * 1000) return;
+
+    renderResult(hit.result, hit.charCount || 0, hit.imageCaptured || false);
+    analyseBtn.textContent = "Re-Analyse Page";
+  } catch (_) { /* silently ignore */ }
+})();
+
 analyseBtn.addEventListener("click", async () => {
   analyseBtn.disabled = true;
   showLoading();
