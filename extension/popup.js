@@ -16,10 +16,13 @@ const resultDiv  = document.getElementById("result");
 const LEVEL_COLOUR = { HIGH: "#fee2e2", MEDIUM: "#fef9c3", LOW: "#dcfce7" };
 
 // Render a successful API response in the result box
-function renderResult({ risk, reason }, charCount, imageUrl) {
+function renderResult({ risk, reason, used_image }, charCount, imageUrl) {
   resultDiv.style.background = LEVEL_COLOUR[risk] ?? "#f3f4f6";
 
-  const imageLine = imageUrl ? "Image detected" : "No image found";
+  // Show what the extension found locally, and whether the backend used it
+  const imageDetected = imageUrl ? "Image detected" : "No image found";
+  const imageUsed     = used_image ? "Image used by model" : "Image not used by model";
+  const imageLine     = imageUrl ? `${imageDetected} · ${imageUsed}` : imageDetected;
 
   resultDiv.textContent =
     `Risk level: ${risk}\n\n` +
