@@ -10,6 +10,7 @@
 # close to 0.0 means real.  See mult_models.py for the architecture.
 
 import io
+import re
 import sys
 import json
 import requests
@@ -104,6 +105,19 @@ def _tokenize(text: str) -> tuple[torch.Tensor, torch.Tensor]:
     return input_ids, attention_mask
 
 
+_SENSATIONAL_WORDS = [
+    "breaking", "shocking", "explosive", "bombshell", "exposed",
+    "conspiracy", "cover-up", "hoax", "scandal", "leaked", "secret",
+    "banned", "censored", "suppressed", "deep state", "plandemic",
+    "you won't believe", "must see", "share immediately",
+]
+
+_EMOTIONAL_WORDS = [
+    "outrage", "disgusting", "unbelievable", "incredible", "insane",
+    "terrifying", "devastating", "alarming", "urgent", "critical",
+]
+
+
 def _prob_to_risk(prob: float) -> tuple[str, str]:
     """
     Map the model's sigmoid output to a risk label.
@@ -129,6 +143,50 @@ def _prob_to_risk(prob: float) -> tuple[str, str]:
         "LOW",
         f"Model predicts likely real content ({1 - prob:.0%} real confidence).",
     )
+
+
+def generate_explanations(text: str, prob: float, used_image: bool) -> list[str]:
+    """Generate human-readable bullet points explaining the risk assessment."""
+    points = []
+    text_lower = text.lower()
+
+    # Model confidence summary
+    if prob >= 0.65:
+        points.append(f"AI model flagged content with {prob:.0%} fake-news probability")
+    elif prob >= 0.40:
+        points.append(f"AI model is uncertain — {prob:.0%} fake-news probability detected")
+    else:
+        points.append(f"AI model found low risk ({(1 - prob):.0%} confidence in authenticity)")
+
+    # Sensational language
+    hits = [w for w in _SENSATIONAL_WORDS if w in text_lower]
+    if hits:
+        sample = ", ".join(f'"{h}"' for h in hits[:3])
+        points.append(f"Sensational language detected: {sample}")
+
+    # Emotional language
+    emo = [w for w in _EMOTIONAL_WORDS if w in text_lower]
+    if emo:
+        n = len(emo)
+        points.append(f"Emotionally charged phrasing present ({n} indicator{'s' if n > 1 else ''})")
+
+    # ALL-CAPS words
+    caps_count = len(re.findall(r'\b[A-Z]{4,}\b', text))
+    if caps_count > 3:
+        points.append(f"Heavy ALL-CAPS usage detected ({caps_count} instances)")
+
+    # Excessive exclamation marks
+    excl = text.count('!')
+    if excl >= 3:
+        points.append(f"Excessive exclamation marks found ({excl})")
+
+    # Image note
+    if used_image:
+        points.append("Both text and image were analyzed by the multimodal model")
+    else:
+        points.append("No image available — analysis based on text only")
+
+    return points
 
 
 # --------------------------------------------------------------------------- #
@@ -177,7 +235,13 @@ def predict(text: str, image_tensor: torch.Tensor) -> dict:
         prob = _model(text=[input_ids, attention_mask], image=image).item()
 
     risk, reason = _prob_to_risk(prob)
-    return {"risk": risk, "reason": reason, "prob": prob}
+    return {
+        "risk": risk,
+        "reason": reason,
+        "confidence": prob,
+        "explanations": generate_explanations(text, prob, used_image=True),
+        "prob": prob,
+    }
 
 
 def predict_text_only(text: str) -> dict:
@@ -192,7 +256,10 @@ def predict_text_only(text: str) -> dict:
     TODO: update the extension to capture a screenshot or a representative image
           from the page, then call predict(text, image_tensor) instead.
     """
+    prob = 0.5
     return {
-        "risk":   "MEDIUM",
+        "risk": "MEDIUM",
         "reason": "Real model expects multimodal input; text-only fallback used.",
+        "confidence": prob,
+        "explanations": generate_explanations(text, prob, used_image=False),
     }

@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 # Importing model_service triggers model loading (BERT + VGG19).
 # This happens once when uvicorn starts, not on every request.
-from model_service import load_image_from_url, predict, predict_text_only
+from model_service import load_image_from_url, predict, predict_text_only, generate_explanations
 
 app = FastAPI(title="Multi-False Detector API", version="0.3.0")
 
@@ -41,9 +41,11 @@ class AnalyseRequest(BaseModel):
 
 
 class AnalyseResponse(BaseModel):
-    risk: str        # "LOW" | "MEDIUM" | "HIGH"
+    risk: str               # "LOW" | "MEDIUM" | "HIGH"
     reason: str
-    used_image: bool # True when the real model ran with an image; False for fallback
+    confidence: float       # model's fake-news probability (0–1)
+    explanations: list[str] # short bullet-point explanations
+    used_image: bool        # True when the real model ran with an image; False for fallback
 
 
 # --------------------------------------------------------------------------- #
@@ -74,18 +76,23 @@ def analyze(request: AnalyseRequest) -> AnalyseResponse:
             print(f"  [5] model prob     : {result['prob']:.4f}")
             print(f"  [6] risk level     : {result['risk']}")
 
-            return AnalyseResponse(risk=result["risk"], reason=result["reason"], used_image=True)
+            return AnalyseResponse(**result, used_image=True)
 
         except Exception as exc:
             print(f"  [3] image download : FAILED ({type(exc).__name__}: {exc})")
             print(f"  [5] model prob     : N/A (fallback)")
             print(f"  [6] risk level     : MEDIUM (fallback)")
 
-            fallback_reason = (
-                f"Image could not be loaded ({type(exc).__name__}); "
-                "text-only fallback used."
+            fallback_prob = 0.5
+            fallback_explanations = generate_explanations(request.text, fallback_prob, used_image=False)
+            fallback_explanations.insert(0, f"Image could not be loaded ({type(exc).__name__})")
+            return AnalyseResponse(
+                risk="MEDIUM",
+                reason=f"Image could not be loaded ({type(exc).__name__}); text-only fallback used.",
+                confidence=fallback_prob,
+                explanations=fallback_explanations,
+                used_image=False,
             )
-            return AnalyseResponse(risk="MEDIUM", reason=fallback_reason, used_image=False)
 
     # No image URL supplied
     print(f"  [3] image download : skipped (no URL)")
@@ -95,4 +102,10 @@ def analyze(request: AnalyseRequest) -> AnalyseResponse:
     print(f"  [5] model prob     : N/A (text-only fallback)")
     print(f"  [6] risk level     : {result['risk']}")
 
-    return AnalyseResponse(**result, used_image=False)
+    return AnalyseResponse(
+        risk=result["risk"],
+        reason=result["reason"],
+        confidence=result["confidence"],
+        explanations=result["explanations"],
+        used_image=False,
+    )

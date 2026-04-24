@@ -6,7 +6,7 @@
   <title>Multi-False Detector</title>
   <style>
     body {
-      width: 300px;
+      width: 320px;
       padding: 16px;
       font-family: sans-serif;
       font-size: 14px;
@@ -35,17 +35,69 @@
 
     #result {
       margin-top: 14px;
-      padding: 10px;
-      border-radius: 6px;
+      padding: 12px;
+      border-radius: 8px;
       background: #f3f4f6;
-      min-height: 48px;
       font-size: 13px;
       color: #374151;
-      white-space: pre-wrap;
-      /* background is swapped by popup.js to reflect risk level:
-         HIGH → red-100  MEDIUM → yellow-100  LOW → green-100 */
       transition: background 0.2s ease;
     }
+
+    /* Risk badge – big centred label */
+    #risk-badge {
+      font-size: 22px;
+      font-weight: 800;
+      text-align: center;
+      letter-spacing: 0.05em;
+      padding: 6px 0 2px;
+    }
+
+    #risk-badge.HIGH    { color: #b91c1c; }
+    #risk-badge.MEDIUM  { color: #92400e; }
+    #risk-badge.LOW     { color: #166534; }
+
+    /* Confidence line */
+    #confidence-line {
+      text-align: center;
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 10px;
+    }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 1px solid rgba(0,0,0,0.1);
+      margin: 8px 0;
+    }
+
+    /* Explanation bullet list */
+    #explanations-list {
+      margin: 6px 0 8px;
+      padding-left: 18px;
+      line-height: 1.55;
+    }
+
+    #explanations-list li {
+      margin-bottom: 4px;
+    }
+
+    /* Meta line at the bottom */
+    #meta-line {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 6px;
+    }
+
+    /* Error / loading states */
+    #status-text {
+      color: #374151;
+    }
+
+    /* Background colours per risk level */
+    #result.HIGH    { background: #fee2e2; }
+    #result.MEDIUM  { background: #fef9c3; }
+    #result.LOW     { background: #dcfce7; }
   </style>
 </head>
 <body>
@@ -53,8 +105,19 @@
 
   <button id="analyseBtn">Analyse Current Page</button>
 
-  <!-- Result area – updated by popup.js -->
-  <div id="result">Press the button to analyse this page.</div>
+  <div id="result">
+    <!-- Default state -->
+    <span id="status-text">Press the button to analyse this page.</span>
+
+    <!-- Populated after a successful API response -->
+    <div id="analysis-output" style="display:none">
+      <div id="risk-badge"></div>
+      <div id="confidence-line"></div>
+      <hr class="divider" />
+      <ul id="explanations-list"></ul>
+      <div id="meta-line"></div>
+    </div>
+  </div>
 
   <script src="popup.js"></script>
 </body>

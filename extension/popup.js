@@ -5,42 +5,65 @@
 //   2. Identify the active browser tab
 //   3. Ask content.js for { text, imageUrl }
 //   4. POST { text, image_url } to the backend at /analyze
-//   5. Render the returned { risk, reason } plus image detection status
+//   5. Render the returned { risk, reason, confidence, explanations, used_image }
 
 const BACKEND_URL = "http://localhost:8000/analyze";
 
-const analyseBtn = document.getElementById("analyseBtn");
-const resultDiv  = document.getElementById("result");
+const analyseBtn      = document.getElementById("analyseBtn");
+const resultDiv       = document.getElementById("result");
+const statusText      = document.getElementById("status-text");
+const analysisOutput  = document.getElementById("analysis-output");
+const riskBadge       = document.getElementById("risk-badge");
+const confidenceLine  = document.getElementById("confidence-line");
+const explanationsList = document.getElementById("explanations-list");
+const metaLine        = document.getElementById("meta-line");
 
-// Maps risk level to a background colour for the result box
-const LEVEL_COLOUR = { HIGH: "#fee2e2", MEDIUM: "#fef9c3", LOW: "#dcfce7" };
-
-// Render a successful API response in the result box
-function renderResult({ risk, reason, used_image }, charCount, imageUrl) {
-  resultDiv.style.background = LEVEL_COLOUR[risk] ?? "#f3f4f6";
-
-  // Show what the extension found locally, and whether the backend used it
-  const imageDetected = imageUrl ? "Image detected" : "No image found";
-  const imageUsed     = used_image ? "Image used by model" : "Image not used by model";
-  const imageLine     = imageUrl ? `${imageDetected} · ${imageUsed}` : imageDetected;
-
-  resultDiv.textContent =
-    `Risk level: ${risk}\n\n` +
-    `${reason}\n\n` +
-    `${imageLine}\n` +
-    `(${charCount.toLocaleString()} characters sent to backend)`;
+function showStatus(msg) {
+  analysisOutput.style.display = "none";
+  statusText.style.display = "";
+  statusText.textContent = msg;
+  resultDiv.className = "";
+  resultDiv.style.background = "";
 }
 
-// Render an error message in the result box
+function renderResult({ risk, confidence, explanations, used_image }, charCount, imageUrl) {
+  // Apply risk-level class to result box (controls background colour)
+  resultDiv.className = risk;
+
+  // Hide plain text, show structured output
+  statusText.style.display = "none";
+  analysisOutput.style.display = "";
+
+  // Big risk label
+  riskBadge.textContent = `${risk} RISK`;
+  riskBadge.className = risk;
+
+  // Confidence percentage
+  const pct = Math.round(confidence * 100);
+  confidenceLine.textContent = `${pct}% probability of misinformation`;
+
+  // Bullet explanations
+  explanationsList.innerHTML = "";
+  for (const point of (explanations ?? [])) {
+    const li = document.createElement("li");
+    li.textContent = point;
+    explanationsList.appendChild(li);
+  }
+
+  // Meta info line
+  const imageUsedNote = used_image ? "image + text" : "text only";
+  const imageDetected = imageUrl ? "image detected" : "no image";
+  metaLine.textContent =
+    `Model input: ${imageUsedNote} · ${imageDetected} · ${charCount.toLocaleString()} chars`;
+}
+
 function renderError(message) {
-  resultDiv.style.background = "#f3f4f6";
-  resultDiv.textContent = `Error: ${message}`;
+  showStatus(`Error: ${message}`);
 }
 
 analyseBtn.addEventListener("click", async () => {
   analyseBtn.disabled = true;
-  resultDiv.style.background = "#f3f4f6";
-  resultDiv.textContent = "Extracting page content…";
+  showStatus("Extracting page content…");
 
   try {
     // Step 1 – identify the active tab
@@ -61,12 +84,9 @@ analyseBtn.addEventListener("click", async () => {
 
     const { text, imageUrl } = pageResponse;
 
-    // Step 3 – show loading state while the API call is in flight
-    resultDiv.textContent = "Analyzing…";
+    showStatus("Analyzing…");
 
-    // Step 4 – POST text and image_url to the backend
-    // The backend currently only uses text (image support is a TODO),
-    // but we send image_url so it is ready when the backend is updated.
+    // Step 3 – POST text and image_url to the backend
     let apiResponse;
     try {
       const res = await fetch(BACKEND_URL, {
@@ -82,12 +102,11 @@ analyseBtn.addEventListener("click", async () => {
 
       apiResponse = await res.json();
     } catch (_networkErr) {
-      // fetch() throws when the server is unreachable
       renderError("Failed to connect to backend. Is it running on port 8000?");
       return;
     }
 
-    // Step 5 – display the result
+    // Step 4 – display the result
     renderResult(apiResponse, text.length, imageUrl);
 
   } catch (err) {
