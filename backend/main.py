@@ -60,13 +60,27 @@ def analyze(request: AnalyseRequest) -> AnalyseResponse:
          - If download or preprocessing fails, fall back to text-only
       2. No image_url → text-only fallback (model requires paired image)
     """
+    print("\n--- /analyze request ---")
+    print(f"  [1] text length    : {len(request.text)} chars")
+    print(f"  [2] image_url      : {'yes → ' + request.image_url if request.image_url else 'not provided'}")
+
     if request.image_url:
         try:
             image_tensor = load_image_from_url(request.image_url)
+            print(f"  [3] image download : success")
+            print(f"  [4] tensor shape   : {list(image_tensor.shape)}")
+
             result = predict(request.text, image_tensor)
-            return AnalyseResponse(**result, used_image=True)
+            print(f"  [5] model prob     : {result['prob']:.4f}")
+            print(f"  [6] risk level     : {result['risk']}")
+
+            return AnalyseResponse(risk=result["risk"], reason=result["reason"], used_image=True)
+
         except Exception as exc:
-            # Surface the fallback reason so it's visible in the extension
+            print(f"  [3] image download : FAILED ({type(exc).__name__}: {exc})")
+            print(f"  [5] model prob     : N/A (fallback)")
+            print(f"  [6] risk level     : MEDIUM (fallback)")
+
             fallback_reason = (
                 f"Image could not be loaded ({type(exc).__name__}); "
                 "text-only fallback used."
@@ -74,5 +88,11 @@ def analyze(request: AnalyseRequest) -> AnalyseResponse:
             return AnalyseResponse(risk="MEDIUM", reason=fallback_reason, used_image=False)
 
     # No image URL supplied
+    print(f"  [3] image download : skipped (no URL)")
+    print(f"  [4] tensor shape   : N/A")
+
     result = predict_text_only(request.text)
+    print(f"  [5] model prob     : N/A (text-only fallback)")
+    print(f"  [6] risk level     : {result['risk']}")
+
     return AnalyseResponse(**result, used_image=False)

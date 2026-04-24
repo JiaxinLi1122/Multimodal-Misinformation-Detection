@@ -177,7 +177,7 @@ def predict(text: str, image_tensor: torch.Tensor) -> dict:
         prob = _model(text=[input_ids, attention_mask], image=image).item()
 
     risk, reason = _prob_to_risk(prob)
-    return {"risk": risk, "reason": reason}
+    return {"risk": risk, "reason": reason, "prob": prob}
 
 
 def predict_text_only(text: str) -> dict:
